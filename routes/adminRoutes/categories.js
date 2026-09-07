@@ -8,6 +8,17 @@ const { makeImageUpload, uploadToCloudinary, deleteFromCloudinary } = require(".
 
 const router = express.Router();
 
+let _homeSettingsCache = null;
+let _homeSettingsCacheTs = 0;
+let _maxCache = null;
+let _maxCacheTs = 0;
+const SETTINGS_TTL = 5 * 60 * 1000;
+
+function invalidateSettingsCache() {
+  _homeSettingsCache = null;
+  _maxCache = null;
+}
+
 // GET /api/admin/main-categories
 router.get("/main-categories", authMiddleware, async (req, res) => {
   try {
@@ -197,6 +208,7 @@ router.patch("/sub-categories/settings/toggle", authMiddleware, async (req, res)
       { $set: { showInHome: newValue } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+    invalidateSettingsCache();
     res.json({ showInHome: doc.showInHome });
   } catch (err) {
     console.error(err);
@@ -214,6 +226,7 @@ router.patch("/sub-categories/settings/order", authMiddleware, async (req, res) 
       { $set: { order: Number(order) || 0 } },
       { upsert: true }
     );
+    invalidateSettingsCache();
     res.json({ success: true });
   } catch {
     res.status(500).json({ error: "خطأ في الخادم" });
@@ -262,7 +275,12 @@ router.post("/sub-categories/settings/image", authMiddleware, makeImageUpload().
 // GET /api/admin/sub-categories/home-settings
 router.get("/sub-categories/home-settings", async (req, res) => {
   try {
+    if (_homeSettingsCache && Date.now() - _homeSettingsCacheTs < SETTINGS_TTL) {
+      return res.json(_homeSettingsCache);
+    }
     const settings = await SubCategorySettings.find({ category: { $ne: "__config__" } }).sort({ order: 1 });
+    _homeSettingsCache = settings;
+    _homeSettingsCacheTs = Date.now();
     res.json(settings);
   } catch {
     res.status(500).json({ error: "خطأ في الخادم" });
@@ -272,8 +290,13 @@ router.get("/sub-categories/home-settings", async (req, res) => {
 // GET /api/admin/sub-categories/max
 router.get("/sub-categories/max", async (req, res) => {
   try {
+    if (_maxCache !== null && Date.now() - _maxCacheTs < SETTINGS_TTL) {
+      return res.json(_maxCache);
+    }
     const doc = await SubCategorySettings.findOne({ category: "__config__", subCategory: "__max__" });
-    res.json({ max: doc ? doc.order : 4 });
+    _maxCache = { max: doc ? doc.order : 4 };
+    _maxCacheTs = Date.now();
+    res.json(_maxCache);
   } catch {
     res.status(500).json({ error: "خطأ في الخادم" });
   }

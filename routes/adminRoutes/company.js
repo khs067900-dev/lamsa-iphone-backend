@@ -7,6 +7,9 @@ const upload = makeImageUpload();
 const uploadFooterImg = makeImageUpload();
 const uploadDoc = makeFileUpload();
 
+let _companyCache = null;
+let _companyCacheTs = 0;
+
 const router = express.Router();
 
 // POST /api/admin/company/upload/:field
@@ -50,6 +53,9 @@ router.delete("/company/image/:field", authMiddleware, async (req, res) => {
 // GET /api/admin/company
 router.get("/company", async (req, res) => {
   try {
+    if (_companyCache && Date.now() - _companyCacheTs < 5 * 60 * 1000) {
+      return res.json(_companyCache);
+    }
     let company = await Company.findOne();
     if (!company) company = await Company.create({});
     if (company.footerItems.length === 0) {
@@ -60,6 +66,8 @@ router.get("/company", async (req, res) => {
       ];
       await company.save();
     }
+    _companyCache = company;
+    _companyCacheTs = Date.now();
     res.json(company);
   } catch {
     res.status(500).json({ error: "خطأ في الخادم" });
@@ -73,6 +81,7 @@ router.put("/company", authMiddleware, async (req, res) => {
     if (!company) company = await Company.create({});
     Object.assign(company, req.body);
     await company.save();
+    _companyCache = null; // invalidate cache
     res.json(company);
   } catch {
     res.status(500).json({ error: "خطأ في الخادم" });

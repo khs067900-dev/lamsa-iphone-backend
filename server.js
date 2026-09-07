@@ -11,7 +11,6 @@ const connectDB = require("./config/db");
 const productRoutes = require("./routes/productRoutes");
 const checkoutRoutes = require("./routes/checkoutRoutes");
 const adminRoutes = require("./routes/adminRoutes");
-const { checkBlockedDevice } = require("./middlewares/checkBlockedDevice");
 
 connectDB();
 
@@ -43,49 +42,21 @@ app.get("/", (req, res) => {
   res.json({ message: "API is running..." });
 });
 
+// Keep-alive ping — prevents Vercel cold start
+app.get("/ping", (req, res) => {
+  res.json({ ok: true, ts: Date.now() });
+});
+
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Public track visit endpoint
-const trackLimiter = rateLimit({ windowMs: 10 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
-app.post("/api/track", trackLimiter, async (req, res) => {
-  try {
-    const { getRealIP } = require("./utils/ipHelper");
-    const { upsertDeviceLog } = require("./services/deviceService");
-    const fp = typeof req.body.fingerprint === "string" ? req.body.fingerprint.slice(0, 64) : null;
-    const ip = getRealIP(req);
-    const ua = typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"].slice(0, 512) : null;
-    const path = typeof req.body.path === "string" ? req.body.path.slice(0, 100) : "/cart";
-    const country = typeof req.headers["cf-ipcountry"] === "string" ? req.headers["cf-ipcountry"].slice(0, 2) : null;
-    await upsertDeviceLog(fp, ip, ua, path, country);
-    res.json({ ok: true });
-  } catch {
-    res.json({ ok: false });
-  }
-});
-
-// Public device check endpoint (called from Next.js middleware)
-const deviceCheckLimiter = rateLimit({ windowMs: 10 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
-app.get("/api/devices/check", deviceCheckLimiter, async (req, res) => {
-  try {
-    const fp = typeof req.query.fp === "string" ? req.query.fp.slice(0, 64) : null;
-    const ip = typeof req.query.ip === "string" ? req.query.ip.slice(0, 45) : null;
-    const { findBlockedDevice } = require("./services/deviceService");
-    const blocked = await findBlockedDevice(fp, ip);
-    return res.json({ blocked: !!blocked });
-  } catch {
-    res.json({ blocked: false });
-  }
-});
-
-// Cache middleware for product listing
-app.use("/api/products", checkBlockedDevice, (req, res, next) => {
+app.use("/api/products", (req, res, next) => {
   if (req.method === "GET") {
     res.set("Cache-Control", "public, max-age=60, s-maxage=60, stale-while-revalidate=300");
   }
   next();
 }, productRoutes);
 
-app.use("/api/checkout", checkBlockedDevice, checkoutRoutes);
+app.use("/api/checkout", checkoutRoutes);
 app.use("/api/admin", adminRoutes);
 
 const PORT = process.env.PORT || 5000;

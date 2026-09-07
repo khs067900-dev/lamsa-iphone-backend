@@ -10,6 +10,5 @@ router.use(require("./reviews"));
 router.use(require("./products"));
 router.use(require("./categoryBanners"));
 router.use(require("./banks"));
-router.use(require("./devices"));
 
 module.exports = router;

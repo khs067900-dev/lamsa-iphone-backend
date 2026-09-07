@@ -2,7 +2,8 @@ const Product = require("../models/Product");
 
 // Shared cache (per worker, but TTL prevents stale data)
 const cache = new Map();
-const CACHE_TTL = 10 * 1000;
+const CACHE_TTL = 5 * 60 * 1000;
+const SEARCH_TTL = 2 * 60 * 1000;
 
 function getCached(key) {
   const entry = cache.get(key);
@@ -36,15 +37,25 @@ exports.getProducts = async (req, res) => {
     if (brand) filter.brand = { $regex: new RegExp(`^${brand}$`, "i") };
     if (category) filter.category = { $regex: new RegExp(category, "i") };
 
-    // Search — no cache, paginated
+    // Search — with short cache
     if (q) {
       const normalized = normalizeArabic(q);
       const pageNum = Math.max(1, parseInt(page) || 1);
       const limitNum = Math.min(50, parseInt(limit) || 20);
+      const searchCacheKey = `search:${normalized}:${pageNum}:${limitNum}`;
+      const cachedSearch = getCached(searchCacheKey);
+      if (cachedSearch) return res.json(cachedSearch);
+      const searchRegex = { $regex: normalized, $options: "i" };
       const products = await Product.find({
         ...filter,
-        name: { $regex: normalized, $options: "i" },
+        $or: [
+          { name: searchRegex },
+          { category: searchRegex },
+          { subCategory: searchRegex },
+          { brand: searchRegex },
+        ],
       }).select(selectFields).limit(limitNum).skip((pageNum - 1) * limitNum).lean();
+      cache.set(searchCacheKey, { data: products, ts: Date.now() - (CACHE_TTL - SEARCH_TTL) });
       return res.json(products);
     }
 
