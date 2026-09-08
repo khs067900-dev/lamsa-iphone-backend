@@ -32,4 +32,6 @@ const checkoutSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+checkoutSchema.index({ createdAt: -1 });
+
 module.exports = mongoose.model("Checkout", checkoutSchema);

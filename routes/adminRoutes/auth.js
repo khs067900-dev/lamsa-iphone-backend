@@ -1,5 +1,6 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 const Admin = require("../../models/Admin");
 const { authMiddleware } = require("./middleware");
 
@@ -14,8 +15,11 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "البريد والكلمة مطلوبان" });
 
     const admin = await Admin.findOne({ email });
-    if (!admin)
+    if (!admin) {
+      // Constant-time response to prevent email enumeration via timing
+      await bcrypt.compare(password, "$2b$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
       return res.status(401).json({ error: "بيانات غير صحيحة" });
+    }
 
     if (admin.isLocked()) {
       return res.status(423).json({ error: "الحساب مقفل مؤقتاً، حاول لاحقاً" });
@@ -38,16 +42,16 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       { id: admin._id, email: admin.email },
       process.env.JWT_SECRET,
-      { expiresIn: "8h" }
+      { expiresIn: "2h" }
     );
 
-    const isProd = process.env.NODE_ENV === "production";
+    const isDev = process.env.NODE_ENV === "development";
     res
       .cookie("admin_token", token, {
         httpOnly: true,
-        secure: isProd,
-        sameSite: isProd ? "none" : "lax",
-        maxAge: 8 * 60 * 60 * 1000,
+        secure: !isDev,
+        sameSite: isDev ? "lax" : "none",
+        maxAge: 2 * 60 * 60 * 1000,
       })
       .json({ success: true });
   } catch (err) {
@@ -57,11 +61,11 @@ router.post("/login", async (req, res) => {
 
 // POST /api/admin/logout
 router.post("/logout", (req, res) => {
-  const isProd = process.env.NODE_ENV === "production";
+  const isDev = process.env.NODE_ENV === "development";
   res.clearCookie("admin_token", {
     httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "none" : "lax",
+    secure: !isDev,
+    sameSite: isDev ? "lax" : "none",
   }).json({ success: true });
 });
 

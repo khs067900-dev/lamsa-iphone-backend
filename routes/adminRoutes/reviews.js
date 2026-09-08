@@ -29,7 +29,16 @@ router.post("/reviews", async (req, res) => {
   try {
     const { name, comment, rating, gender } = req.body;
     if (!name || !comment) return res.status(400).json({ error: "الاسم والتعليق مطلوبان" });
-    const review = await Review.create({ name, comment, rating: rating || 5, gender: gender || "male" });
+    if (typeof name !== "string" || name.trim().length > 100)
+      return res.status(400).json({ error: "الاسم غير صحيح" });
+    if (typeof comment !== "string" || comment.trim().length > 1000)
+      return res.status(400).json({ error: "التعليق غير صحيح" });
+    const ratingNum = Number(rating);
+    if (rating !== undefined && (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5))
+      return res.status(400).json({ error: "التقييم غير صحيح" });
+    if (gender !== undefined && !["male", "female"].includes(gender))
+      return res.status(400).json({ error: "الجنس غير صحيح" });
+    const review = await Review.create({ name: name.trim(), comment: comment.trim(), rating: ratingNum || 5, gender: gender || "male" });
     res.status(201).json({ success: true, _id: review._id });
   } catch {
     res.status(500).json({ error: "خطأ في الخادم" });

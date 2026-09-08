@@ -11,4 +11,6 @@ const reviewSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+reviewSchema.index({ approved: 1, createdAt: -1 });
+
 module.exports = mongoose.model("Review", reviewSchema);

@@ -77,11 +77,17 @@ router.get("/company", async (req, res) => {
 // PUT /api/admin/company
 router.put("/company", authMiddleware, async (req, res) => {
   try {
+    const ALLOWED = [
+      "nameAr", "nameEn", "addressAr", "addressEn", "phone", "whatsapp",
+      "website", "email", "currencyAr", "currencyEn", "taxNumber",
+      "shippingCompany", "paymentMethod", "details", "qrLink", "qrLinkType",
+      "link1", "link1Type", "link2", "link2Type", "footerItems",
+    ];
     let company = await Company.findOne();
     if (!company) company = await Company.create({});
-    Object.assign(company, req.body);
+    ALLOWED.forEach((key) => { if (key in req.body) company[key] = req.body[key]; });
     await company.save();
-    _companyCache = null; // invalidate cache
+    _companyCache = null;
     res.json(company);
   } catch {
     res.status(500).json({ error: "خطأ في الخادم" });
