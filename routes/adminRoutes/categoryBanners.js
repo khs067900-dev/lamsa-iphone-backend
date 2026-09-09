@@ -2,6 +2,7 @@ const express = require("express");
 const CategoryBanner = require("../../models/CategoryBanner");
 const { authMiddleware } = require("./middleware");
 const { makeImageUpload, uploadToCloudinary, deleteFromCloudinary } = require("../../config/cloudinary");
+const connectDB = require("../../config/db");
 
 const uploadCategoryBanner = makeImageUpload();
 const router = express.Router();
@@ -9,6 +10,7 @@ const router = express.Router();
 // GET /api/admin/category-banners-bulk?categories=cat1,cat2,...
 router.get("/category-banners-bulk", async (req, res) => {
   try {
+    await connectDB();
     const raw = req.query.categories;
     if (!raw) return res.json({});
     const names = String(raw).split(",").map((s) => s.trim()).filter(Boolean);
@@ -19,7 +21,8 @@ router.get("/category-banners-bulk", async (req, res) => {
       if (active.length) result[doc.category] = active;
     }
     res.json(result);
-  } catch {
+  } catch (err) {
+    console.error("category-banners-bulk error:", err);
     res.status(500).json({ error: "خطأ في الخادم" });
   }
 });
