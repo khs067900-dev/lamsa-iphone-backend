@@ -25,7 +25,29 @@ function setCached(key, data) {
   cache.set(key, { data, ts: Date.now() });
 }
 
-exports.invalidateCache = () => cache.clear();
+const ALLOWED_PUBLIC_FIELDS = new Set([
+  "name", "originalPrice", "salePrice", "image", "images",
+  "color", "storage", "category", "subCategory", "brand",
+  "inStock", "freeDelivery", "warrantyYears", "installment",
+  "discountPercent", "network", "price", "taxIncluded",
+  "deliveryTime", "overview", "features", "detailedSpecs",
+  "description", "specs", "screenSize",
+]);
+
+function sanitizeFields(fields) {
+  if (!fields) return "";
+  return fields
+    .split(",")
+    .map((f) => f.trim())
+    .filter((f) => ALLOWED_PUBLIC_FIELDS.has(f))
+    .join(" ");
+}
+
+// [FIX C2] Strip __v from any product object after lean()
+function stripMeta(p) {
+  if (p && typeof p === "object") delete p.__v;
+  return p;
+}
 
 function normalizeArabic(str) {
   return str
@@ -39,10 +61,13 @@ function normalizeArabic(str) {
 exports.getProducts = async (req, res) => {
   try {
     const { q, fields, page, limit, brand, category } = req.query;
-    const selectFields = fields ? fields.replace(/,/g, " ") : "";
+    // [FIX C1] Sanitize — reject any non-string (object) query param to block NoSQL injection
+    const safeBrand = brand && typeof brand === "string" && !brand.includes("$") ? brand : undefined;
+    const safeCategory = category && typeof category === "string" && !category.includes("$") ? category : undefined;
+    const selectFields = sanitizeFields(fields);
     const filter = {};
-    if (brand) filter.brand = { $regex: new RegExp(`^${escapeRegex(brand)}$`, "i") };
-    if (category) filter.category = { $regex: new RegExp(`^${escapeRegex(category)}$`, "i") };
+    if (safeBrand) filter.brand = { $regex: new RegExp(`^${escapeRegex(safeBrand)}$`, "i") };
+    if (safeCategory) filter.category = { $regex: new RegExp(`^${escapeRegex(safeCategory)}$`, "i") };
 
     // Search — with short cache
     if (q) {
@@ -66,7 +91,7 @@ exports.getProducts = async (req, res) => {
         if (p.discountPercent == null && p.salePrice && p.originalPrice > p.salePrice) {
           p.discountPercent = Math.round(((p.originalPrice - p.salePrice) / p.originalPrice) * 100);
         }
-        return p;
+        return stripMeta(p);
       });
       cache.set(searchCacheKey, { data: products, ts: Date.now() - (CACHE_TTL - SEARCH_TTL) });
       return res.json(products);
@@ -74,19 +99,19 @@ exports.getProducts = async (req, res) => {
 
     // Paginated listing with cache
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(100, parseInt(limit) || 20);
+    const limitNum = Math.min(500, parseInt(limit) || 20);
     const cacheKey = `products:${brand || ""}:${category || ""}:${selectFields}:${pageNum}:${limitNum}`;
     const cached = getCached(cacheKey);
     if (cached) return res.json(cached);
 
-    const query = Product.find(filter).select(selectFields).skip((pageNum - 1) * limitNum).limit(limitNum).lean({ virtuals: true });
+    const query = Product.find(filter).select(selectFields).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean({ virtuals: true });
     const [rawProducts, total] = await Promise.all([query, Product.countDocuments(filter)]);
     // Ensure discountPercent is always present even if virtual didn't attach
     const products = rawProducts.map((p) => {
       if (p.discountPercent == null && p.salePrice && p.originalPrice > p.salePrice) {
         p.discountPercent = Math.round(((p.originalPrice - p.salePrice) / p.originalPrice) * 100);
       }
-      return p;
+      return stripMeta(p);
     });
     const result = { products, total, page: pageNum, pages: Math.ceil(total / limitNum) };
     setCached(cacheKey, result);
@@ -102,8 +127,12 @@ exports.getProduct = async (req, res) => {
     const cached = getCached(cacheKey);
     if (cached) return res.json(cached);
 
-    const product = await Product.findById(req.params.id).lean();
+    const product = await Product.findById(req.params.id).lean({ virtuals: true });
     if (!product) return res.status(404).json({ message: "Product not found" });
+    if (product.discountPercent == null && product.salePrice && product.originalPrice > product.salePrice) {
+      product.discountPercent = Math.round(((product.originalPrice - product.salePrice) / product.originalPrice) * 100);
+    }
+    stripMeta(product);
     setCached(cacheKey, product);
     res.json(product);
   } catch (err) {

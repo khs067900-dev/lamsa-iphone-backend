@@ -68,5 +68,7 @@ productSchema.virtual("price").get(function () {
 productSchema.index({ name: "text", category: "text", subCategory: "text", brand: "text" });
 productSchema.index({ inStock: 1 });
 productSchema.index({ brand: 1, category: 1 });
+productSchema.index({ subCategory: 1 });
+productSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Product", productSchema);
