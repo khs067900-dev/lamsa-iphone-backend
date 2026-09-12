@@ -10,6 +10,7 @@ const cookieParser = require("cookie-parser");
 const connectDB = require("./config/db");
 const productRoutes = require("./routes/productRoutes");
 const checkoutRoutes = require("./routes/checkoutRoutes");
+const preOrderRoutes = require("./routes/preOrderRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
@@ -87,6 +88,7 @@ app.use("/api/admin/sub-categories/max", (req, res, next) => {
 });
 
 app.use("/api/checkout", checkoutRoutes);
+app.use("/api/pre-orders", preOrderRoutes);
 app.use("/api/admin", adminRoutes);
 
 const PORT = process.env.PORT || 5000;

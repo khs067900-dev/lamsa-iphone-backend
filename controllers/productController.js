@@ -25,13 +25,15 @@ function setCached(key, data) {
   cache.set(key, { data, ts: Date.now() });
 }
 
+exports.invalidateCache = () => cache.clear();
+
 const ALLOWED_PUBLIC_FIELDS = new Set([
   "name", "originalPrice", "salePrice", "image", "images",
   "color", "storage", "category", "subCategory", "brand",
   "inStock", "freeDelivery", "warrantyYears", "installment",
   "discountPercent", "network", "price", "taxIncluded",
   "deliveryTime", "overview", "features", "detailedSpecs",
-  "description", "specs", "screenSize",
+  "description", "specs", "screenSize", "variants",
 ]);
 
 function sanitizeFields(fields) {
@@ -142,9 +144,9 @@ exports.getProduct = async (req, res) => {
 
 const PRODUCT_ALLOWED_FIELDS = [
   "name", "originalPrice", "salePrice", "description", "image", "images",
-  "color", "storage", "network", "screenSize", "specs", "freeDelivery",
+  "color", "storage", "network", "screenSize", "specs", "specGroups", "freeDelivery",
   "deliveryTime", "warrantyYears", "installment", "taxIncluded", "category",
-  "subCategory", "brand", "inStock", "colors", "overview", "features", "detailedSpecs",
+  "subCategory", "brand", "inStock", "variants", "overview", "features", "detailedSpecs",
 ];
 
 function pickAllowed(body) {
